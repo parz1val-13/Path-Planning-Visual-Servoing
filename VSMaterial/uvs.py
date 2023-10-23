@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import numpy as np
 from queue import Queue
 
@@ -6,7 +8,7 @@ class UVS:
         self.tracker = tracker
         self.server = server
         self.queue = Queue()
-        self.jacobian = np.zeros((2,2))
+        self.jacobian = np.eye(2)  # Initialize Jacobian as 2x2 identity matrix
         self.goal = np.zeros((2,1))
         self.point = np.zeros((2,1))
         self.error = np.zeros((2,1))
@@ -25,18 +27,41 @@ class UVS:
         # Replace 1 with the appropriate value for your application.
         self.scaleFactor = 1
 
-    def updateJacobian(self, deltaAngles):
-        # Compute the change in error from the last iteration.
-        deltaError = self.error - self.lastError
-        # Update each element of the jacobian matrix.
+    def initial_jacobian_estimate(self):
+        # Small angle for estimation
+        delta_angle = 0.01
+
         for i in range(2):
-            for j in range(2):
-                if deltaAngles[j] != 0:
-                    # The change in error divided by the change in angle gives an approximation of the derivative.
-                    self.jacobian[i,j] = deltaError[i] / deltaAngles[j]
-                else:
-                    # If there was no change in angle, then we cannot compute a derivative and instead just keep the old value.
-                    pass
+            # Get initial end effector position
+            initial_position = self.point.copy()
+
+            # Increment angle[i] by a small amount and get new position
+            reply=self.server.sendAngles(delta_angle if i == 0 else 0, delta_angle if i == 1 else 0)
+            if reply == "DONE":
+                self.updateState()  # Update state to get new position
+                new_position = self.point.copy()
+            else:
+                print("Error in initial Jacobian estimation")
+                return
+
+            # Calculate change in position
+            delta_position = new_position - initial_position
+
+            # Update jacobian column
+            self.jacobian[:, i] = delta_position / delta_angle
+
+            # Reset angle[i] back to original value by moving in opposite direction
+            reply=self.server.sendAngles(-delta_angle if i == 0 else 0, -delta_angle if i == 1 else 0)
+
+    def updateJacobian(self, deltaAngles):
+        # Compute change in error from the last iteration.
+        deltaError = self.error - self.lastError
+
+        # Compute change in Jacobian using Broyden's update
+        deltaX = np.outer(deltaError - np.dot(self.jacobian, deltaAngles), deltaAngles) / np.dot(deltaAngles, deltaAngles)
+
+        # Update Jacobian
+        self.jacobian += deltaX
 
     def computeError(self):
         self.error = self.goal - self.point
@@ -64,62 +89,49 @@ class UVS:
         # Compute error.
         self.computeError()
         
-        # Update deltaPoint and deltaGoal.
-        self.deltaPoint = self.point - self.lastPoint
-        self.deltaGoal = self.goal - self.lastGoal
-        
-        # Update lastError.
-        self.lastError = np.copy(self.error)
-
     def iterate(self):
-        print("Running UVS Iteration")
-        
-        # Update state variables.
-        self.updateState()
-        
-        if np.linalg.norm(self.error) > 1:
-            if np.linalg.norm(self.deltaAngles) == 0:
-                print("Sending Zero Command")
-                self.server.sendAngles(0, 0, self.queue)
-                reply = self.queue.get()
-                if reply == "DONE":
-                    pass
-                elif reply == "RESET":
-                    print("Resetting")
-                    return
-                else:
-                    print("Unknown Reply")
-                    return
-            else:
-                print("Updating Jacobian")
-                # Update jacobian based on last movement and observed change in error.
-                self.updateJacobian(self.deltaAngles)
-                
-                print("Updated Jacobian: " + str(self.jacobian))
-                
-                # Compute change in angles needed to reduce error based on current jacobian and error.
-                deltaAngles = self.computeDeltaAngles()
-                
-                print("Computed Delta Angles: " + str(deltaAngles))
-                
-                # Send computed change in angles to robot arm.
-                print("Sending Command")
-                self.server.sendAngles(deltaAngles[0], deltaAngles[1], self.queue)
-                
-                reply = self.queue.get()
-                
-                if reply == "DONE":
-                    print("Command Executed")
-                    # Update angles based on command that was executed.
-                    self.angles += deltaAngles
-                    self.deltaAngles = deltaAngles
-                elif reply == "RESET":
-                    print("Resetting")
-                    return
-                else:
-                    print("Unknown Reply")
-                    return
+       print("Running UVS Iteration")
+       # Update state variables.
+       self.updateState()
+       if np.linalg.norm(self.error) > 1:
+           if np.linalg.norm(self.deltaAngles) == 0:
+               print("Sending Zero Command")
+               reply=self.server.sendAngles(0, 0)
+               if reply == "DONE":
+                   pass
+               elif reply == "RESET":
+                   print("Resetting")
+                   return
+               else:
+                   print("Unknown Reply")
+                   return
+           else:
+               print("Updating Jacobian")
+               # Update jacobian based on last movement and observed change in error.
+               self.updateJacobian(self.deltaAngles)
+               
+               print("Updated Jacobian: " + str(self.jacobian))
+               
+               # Compute change in angles needed to reduce error based on current jacobian and error.
+               deltaAngles = self.computeDeltaAngles()
+               
+               print("Computed Delta Angles: " + str(deltaAngles))
+
+               reply=self.server.sendAngles(deltaAngles[0], deltaAngles[1])
+               if reply == "DONE":
+                   print("Command Executed")
+                   # Update angles based on command that was executed.
+                   self.angles += deltaAngles
+                   self.deltaAngles = deltaAngles
+               elif reply == "RESET":
+                   print("Resetting")
+                   return
+               else:
+                   print("Unknown Reply")
+                   return
+
     def run(self):
+       self.initial_jacobian_estimate()  # Estimate initial Jacobian using orthogonal motions
        while True:
            if np.linalg.norm(self.error) < 1:
                break

@@ -1,8 +1,11 @@
+#!/usr/bin/env python3
+
 #################################################################################################################################
 ### This file implements color specific sphere tracking. It can potentially be used for tracking recovery by object detection ###
 #################################################################################################################################
 
 #Requires refactoring. This is just a "proof of concept" implementation
+
 
 import cv2
 import numpy as np

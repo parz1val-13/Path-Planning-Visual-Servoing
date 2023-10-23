@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from ev3dev2.motor import LargeMotor, OUTPUT_C, OUTPUT_D, SpeedPercent
 from ev3dev2.sensor.lego import TouchSensor
-import numpy as np
+#import numpy as np
 import math
 import sys
 from time import sleep
@@ -381,13 +381,13 @@ def main():
     draw_straight_line_newton(point1, point2, num_steps)
 
     # Initialize tracker, server, and UVS
-    tracker = Tracker('g', 'r')
-    server = Server('192.168.0.2', 9999)
-    uvs = UVS(tracker, server)
+    #tracker = Tracker('g', 'r')
+    #server = Server('192.168.0.2', 9999)
+    #uvs = UVS(tracker, server)
 
     # Run UVS
-    print("Running UVS")
-    uvs.run()
+    #print("Running UVS")
+    #uvs.run()
 
 if __name__ == "__main__":
     main()
