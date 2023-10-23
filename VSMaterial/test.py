@@ -322,28 +322,27 @@ def measure_midpoint():
     move_to_position_newton(mid_x, mid_y)
 
 
-def draw_straight_line_newton(point1, point2, num_steps):
+def draw_straight_line(point1, point2, num_steps):
     """
-    Draws a straight line defined by two points using a robot arm and Newton's Method for inverse kinematics.
+    Draws a straight line defined by two points using a robot arm and analytic Method for inverse kinematics.
     
     Args:
         point1 (tuple): The (x, y) coordinates of the starting point.
         point2 (tuple): The (x, y) coordinates of the ending point.
         num_steps (int): The number of steps to divide the line into.
     """
-    # Move the robot to the starting point (point1)
-    move_to_position_newton(point1[0], point1[1])
-
     # Calculate the incremental movement
     step_size = ((point2[0] - point1[0]) / num_steps, (point2[1] - point1[1]) / num_steps)
 
     # Move the robot incrementally to draw the line
-    for _ in range(num_steps - 1):
-        point1 = (point1[0] + step_size[0], point1[1] + step_size[1])
-        move_to_position_newton(point1[0], point1[1])
+    for i in range(num_steps):
+        # Calculate the current position
+        current_point = (point1[0] + i * step_size[0], point1[1] + i * step_size[1])
+        
+        # Move to the current position
+        move_to_position_analytic(current_point[0], current_point[1])
 
-    # Move the robot to the final point (point2)
-    move_to_position_newton(point2[0], point2[1])
+
 
 
 
@@ -357,32 +356,35 @@ def main():
     motor1.reset()
     motor2.reset()
 
-    x, y = forward_kinematics(motor1.position, motor2.position)
-    print("The end effector is at position ( " + str(round(x,1)) + ',' + str(round(y,1)) + ")", file=sys.stderr)
+    #x, y = forward_kinematics(motor1.position, motor2.position)
+    #print("The end effector is at position ( " + str(round(x,1)) + ',' + str(round(y,1)) + ")", file=sys.stderr)
 
-    move_to_angles(theta1, theta2)
+    '''move_to_angles(theta1, theta2)
     x, y = forward_kinematics(motor1.position, motor2.position)
     print("The end effector is at position ( " + str(round(x,1)) + ',' + str(round(y,1)) + ")", file=sys.stderr)
 
     error = math.sqrt((x - target_x)**2 + (y - target_y)**2)
-    print("The Euclidean distance error between target and actual positions is: " + str(round(error,2)) + " cm", file=sys.stderr)
+    print("The Euclidean distance error between target and actual positions is: " + str(round(error,2)) + " cm", file=sys.stderr)'''
 
     #measure_distance()
     #measure_angle()
     #move_to_position_newton(18, -15.7)
     #move_to_position_newton(8, 18)
     #measure_midpoint()
-    #x, y = forward_kinematics(motor1.position, motor2.position)
-    #print("The end effector is at position ( " + str(round(x,1)) + ',' + str(round(y,1)) + ")", file=sys.stderr)
-    point1 = (10, 10)  # Starting point
-    point2 = (30, 30)  # Ending point
+    x, y = forward_kinematics(motor1.position, motor2.position)
+    print("The end effector is at position ( " + str(round(x,1)) + ',' + str(round(y,1)) + ")", file=sys.stderr)
+    point1 = (18, -15.7)  # Starting point
+    point2 = (3.6, 17.8)  # Ending point
     num_steps = 10  # Number of steps to divide the line
 
-    draw_straight_line_newton(point1, point2, num_steps)
+    draw_straight_line(point1, point2, num_steps)
+
+    x, y = forward_kinematics(motor1.position, motor2.position)
+    print("The end effector is at position ( " + str(round(x,1)) + ',' + str(round(y,1)) + ")", file=sys.stderr)
 
     # Initialize tracker, server, and UVS
-    tracker = Tracker('g', 'r')
-    server = Server('192.168.0.2', 9999)
+    #tracker = Tracker('g', 'r')
+    #server = Server('192.168.0.2', 9999)
     #uvs = UVS(tracker, server)
 
     # Run UVS
