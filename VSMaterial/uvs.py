@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import numpy as np
 from queue import Queue
 
@@ -19,9 +18,9 @@ class UVS:
         self.deltaGoal = np.zeros((2,1))
         self.deltaAngles = np.zeros((2,1))
         self.angles = np.zeros((2,1))
-        # Proportional gain
+        # self.Kp: Proportional gain in control system. Determines response strength.
         self.Kp = 0.01
-        # Derivative gain
+        # self.Kd: Derivative gain in control system. Predicts error change, counters overshoot.
         self.Kd = 0.01
         # Scale factor for converting raw pixel values to cm.
         # Replace 1 with the appropriate value for your application.
@@ -36,8 +35,8 @@ class UVS:
             initial_position = self.point.copy()
 
             # Increment angle[i] by a small amount and get new position
-            reply=self.server.sendAngles(delta_angle if i == 0 else 0, delta_angle if i == 1 else 0)
-            if reply == "DONE":
+            reply=self.server.sendAngles(delta_angle if i == 0 else 0, delta_angle if i == 1 else 0, self.queue)
+            if len(reply) != 0:
                 self.updateState()  # Update state to get new position
                 new_position = self.point.copy()
             else:
@@ -51,7 +50,7 @@ class UVS:
             self.jacobian[:, i] = delta_position / delta_angle
 
             # Reset angle[i] back to original value by moving in opposite direction
-            reply=self.server.sendAngles(-delta_angle if i == 0 else 0, -delta_angle if i == 1 else 0)
+            reply=self.server.sendAngles(-delta_angle if i == 0 else 0, -delta_angle if i == 1 else 0,self.queue)
 
     def updateJacobian(self, deltaAngles):
         # Compute change in error from the last iteration.
@@ -67,14 +66,19 @@ class UVS:
         self.error = self.goal - self.point
 
     def computeDeltaAngles(self):
+        # Compute the transpose of the Jacobian matrix and multiply it with the Jacobian matrix itself
         JTJ = np.matmul(self.jacobian.T,self.jacobian)
+        # Compute the transpose of the Jacobian matrix and multiply it with the error vector
         JTerror = np.matmul(self.jacobian.T,self.error)
         
         try:
+            # Try to compute the inverse of JTJ
             invJTJ = np.linalg.inv(JTJ)
+            # Compute delta angles using the inverse of JTJ, error vector and a constant Kp  
             deltaAngles = -self.Kp*np.matmul(invJTJ,JTerror)
             return deltaAngles
         except np.linalg.LinAlgError:
+            # If the inverse computation fails, use least squares method to solve for delta angles
             deltaAngles = -self.Kp*np.linalg.lstsq(JTJ,JTerror,rcond=None)[0]
             return deltaAngles
 

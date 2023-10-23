@@ -5,9 +5,9 @@ from ev3dev2.sensor.lego import TouchSensor
 import math
 import sys
 from time import sleep
-from color_tracking import Tracker
-from server import Server
-from uvs import UVS
+#from color_tracking import Tracker
+#from server import Server
+#from uvs import UVS
 
 # Lengths of the links
 link1 = 16.8  # length of link 1 in cm
@@ -381,8 +381,8 @@ def main():
     draw_straight_line_newton(point1, point2, num_steps)
 
     # Initialize tracker, server, and UVS
-    #tracker = Tracker('g', 'r')
-    #server = Server('192.168.0.2', 9999)
+    tracker = Tracker('g', 'r')
+    server = Server('192.168.0.2', 9999)
     #uvs = UVS(tracker, server)
 
     # Run UVS
