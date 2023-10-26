@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 import numpy as np
 from queue import Queue
+#from server import Server
+#from client import Client
 
 class UVS:
-    def __init__(self, tracker, server):
+    def __init__(self, tracker, server, client):
         self.tracker = tracker
+        self.client = client
         self.server = server
         self.queue = Queue()
         self.jacobian = np.eye(2)  # Initialize Jacobian as 2x2 identity matrix
@@ -22,9 +25,7 @@ class UVS:
         self.Kp = 0.01
         # self.Kd: Derivative gain in control system. Predicts error change, counters overshoot.
         self.Kd = 0.01
-        # Scale factor for converting raw pixel values to cm.
-        # Replace 1 with the appropriate value for your application.
-        self.scaleFactor = 1
+    
 
     def initial_jacobian_estimate(self):
         # Small angle for estimation
@@ -85,11 +86,13 @@ class UVS:
     def updateState(self):
         pointRaw = self.tracker.point[0:2]
         goalRaw = self.tracker.goal[0:2]
-        
-        # Scale raw pixel values to cm.
-        self.point = np.array([[pointRaw[0]*self.scaleFactor],[pointRaw[1]*self.scaleFactor]])
-        self.goal = np.array([[goalRaw[0]*self.scaleFactor],[goalRaw[1]*self.scaleFactor]])
-        
+        print("ahahah")
+        print(pointRaw)
+        print(goalRaw)
+        # Assign raw pixel values directly.
+        self.point = np.array([[pointRaw[0]],[pointRaw[1]]])
+        self.goal = np.array([[goalRaw[0]],[goalRaw[1]]])
+
         # Compute error.
         self.computeError()
         
@@ -137,7 +140,7 @@ class UVS:
     def run(self):
        self.initial_jacobian_estimate()  # Estimate initial Jacobian using orthogonal motions
        while True:
-           if np.linalg.norm(self.error) < 1:
+           if np.linalg.norm(self.error) < 1:  # Stopping condition
                break
            else:
                try:

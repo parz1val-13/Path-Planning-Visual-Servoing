@@ -5,9 +5,11 @@ from ev3dev2.sensor.lego import TouchSensor
 import math
 import sys
 from time import sleep
-#from color_tracking import Tracker
-#from server import Server
-#from uvs import UVS
+from color_tracking import Tracker
+from server import Server
+from uvs import UVS
+from client import Client
+
 
 # Lengths of the links
 link1 = 16.8  # length of link 1 in cm
@@ -123,7 +125,7 @@ def measure_angle():
 
 
 #  Analytic method to implement inverse kinematics
-def inverse_kinematics_analytic(x, y):
+def inverse_kinematics_analytic(x, y, initial_theta1, initial_theta2):
     """
     Given an (x, y) position in cm, this function calculates the joint angles required
     to reach that position.
@@ -134,7 +136,7 @@ def inverse_kinematics_analytic(x, y):
     # Check if the target is reachable, otherwise return current position
     if r > link1 + link2:
         print("Target is not reachable")
-        return motor1.position, motor2.position
+        return initial_theta1, initial_theta2
 
     # Calculate joint angles using inverse kinematics formulas
     cos_theta2 = (r**2 - link1**2 - link2**2) / (2 * link1 * link2)
@@ -158,15 +160,15 @@ def inverse_kinematics_analytic(x, y):
         return theta1_up, theta2_up
     else:
         return theta1_down, theta2_down
-
-
+    
 #  Helper function for analytic inverse kinematics
-def move_to_position_analytic(x, y):
+def move_to_position_analytic(x, y, initial_theta1, initial_theta2):
     """
     Moves the robot arm to the specified (x, y) position.
     """
-    theta1, theta2 = inverse_kinematics_analytic(x, y)
-    move_to_angles(theta1, theta2)
+    theta1, theta2 = inverse_kinematics_analytic(x, y, initial_theta1, initial_theta2)
+    
+    return theta1,theta2
 
 
 #  Function to implement Jacobian matrix
@@ -184,7 +186,6 @@ def jacobian(theta1, theta2):
     return [[J11, J12], [J21, J22]]
 
 
-#  Function to implement numerical method for inverse kinematics
 def inverse_kinematics_newton(target_x, target_y, initial_theta1, initial_theta2):
     # Set a tolerance level
     tolerance = 0.0001
@@ -192,38 +193,40 @@ def inverse_kinematics_newton(target_x, target_y, initial_theta1, initial_theta2
     # Initialize thetas
     theta1 = initial_theta1
     theta2 = initial_theta2
-    #print(theta1, theta2, file=sys.stderr)
+
     while True:
         current_x, current_y = forward_kinematics(theta1, theta2)
         error = [target_x - current_x, target_y - current_y]
-        #print(error, file=sys.stderr)
+
         # If the error is within the tolerance level, break the loop
         if math.sqrt(error[0] ** 2 + error[1] ** 2) < tolerance:
             break
 
         # Calculate the Jacobian
         J = jacobian(theta1, theta2)
-        #print(J, file=sys.stderr)
+
         # Calculate the determinant of the Jacobian
         detJ = J[0][0] * J[1][1] - J[0][1] * J[1][0]
-        #print(detJ, file=sys.stderr)
-        # Avoid division by zero
+
+        # Avoid division by zero and singularities
         if abs(detJ) < 1e-6:
-            print("Singularity reached. Unable to calculate inverse.")
-            break
+            print("Singularity detected. Adjusting joint angles.")
+            theta1 += 0.01
+            theta2 += 0.01
+            continue
 
         # Calculate the pseudo-inverse of the Jacobian
         J_inv = [[J[1][1] / detJ, -J[0][1] / detJ], [-J[1][0] / detJ, J[0][0] / detJ]]
 
         # Calculate change in thetas
         delta_theta = [J_inv[0][0] * error[0] + J_inv[0][1] * error[1], J_inv[1][0] * error[0] + J_inv[1][1] * error[1]]
-        #print(delta_theta, file=sys.stderr)
+
         # Update thetas
         theta1 += delta_theta[0]
         theta2 += delta_theta[1]
-        #print(theta1, theta2, file=sys.stderr)
 
     return theta1, theta2
+
 
 
 #  Helper function for Newtonian method for inverse kinematics
@@ -238,54 +241,6 @@ def move_to_position_newton(x, y):
 
     # Convert joint angles to motor commands and execute them
     move_to_angles(theta1, theta2)
-
-
-'''def broydens_method(target_x, target_y, initial_theta1, initial_theta2):
-    # Set a tolerance level
-    tolerance = 0.01
-
-    # Initialize thetas
-    theta = np.array([initial_theta1, initial_theta2])
-
-    # Initialize Jacobian approximation (identity matrix)
-    J_inv = np.eye(2)
-
-    while True:
-        current_x, current_y = forward_kinematics(theta[0], theta[1])
-        error = np.array([target_x - current_x, target_y - current_y])
-
-        # If the error is within the tolerance level, break the loop
-        if np.linalg.norm(error) < tolerance:
-            break
-
-        # Calculate change in thetas
-        delta_theta = J_inv @ error
-
-        # Update thetas
-        theta_new = theta + delta_theta
-
-        # Calculate change in end effector position
-        delta_x, delta_y = forward_kinematics(theta_new[0], theta_new[1]) - forward_kinematics(theta[0], theta[1])
-        delta_f = np.array([delta_x, delta_y])
-
-        # Update Jacobian approximation
-        y = delta_f - J_inv @ error
-        J_inv += np.outer(delta_theta - J_inv @ y, delta_theta) / (delta_theta @ y)
-
-        theta = theta_new
-
-    return theta[0], theta[1]
-
-
-def move_to_position_broyden(x, y):
-    # Use your initial joint angles here
-    initial_theta1 = 0
-    initial_theta2 = 0
-
-    theta1, theta2 = broydens_method(x, y, initial_theta1, initial_theta2)
-
-    # Convert joint angles to motor commands and execute them
-    move_to_angles(theta1, theta2)'''
 
 
 #  Function to move to midpoint of 2 recorded points
@@ -322,25 +277,47 @@ def measure_midpoint():
     move_to_position_newton(mid_x, mid_y)
 
 
+# Function to draw a straight line defined by two points
 def draw_straight_line(point1, point2, num_steps):
-    """
-    Draws a straight line defined by two points using a robot arm and analytic Method for inverse kinematics.
-    
-    Args:
-        point1 (tuple): The (x, y) coordinates of the starting point.
-        point2 (tuple): The (x, y) coordinates of the ending point.
-        num_steps (int): The number of steps to divide the line into.
-    """
-    # Calculate the incremental movement
-    step_size = ((point2[0] - point1[0]) / num_steps, (point2[1] - point1[1]) / num_steps)
+    # Ensure num_steps is a positive integer
+    if num_steps <= 0:
+        print("Invalid number of steps.")
+        return
 
-    # Move the robot incrementally to draw the line
-    for i in range(num_steps):
-        # Calculate the current position
-        current_point = (point1[0] + i * step_size[0], point1[1] + i * step_size[1])
-        
-        # Move to the current position
-        move_to_position_analytic(current_point[0], current_point[1])
+    # Extract the coordinates of the two points
+    x1, y1 = point1
+    x2, y2 = point2
+
+    # Calculate the step increments for x and y
+    dx = (x2 - x1) / num_steps
+    dy = (y2 - y1) / num_steps
+
+    # Initialize the current position to the starting point
+    current_x = 26.8
+    current_y = 0
+
+    # Use your initial joint angles here
+    initial_theta1 = 0
+    initial_theta2 = 0
+
+    # Move the robot arm through the intermediate points
+    for step in range(num_steps + 1):
+        new_x = current_x + dx
+        new_y = current_y + dy
+        # Move the robot arm to the current position (x, y)
+        new_theta1, new_theta2 = move_to_position_analytic(new_x, new_y,initial_theta1,initial_theta2)
+
+        # Print or log the current position if needed
+        #print("Step", step, "Position:", current_x, current_y)
+
+        change_theta_1 = new_theta1 - initial_theta1
+        change_theta_2 = new_theta2 - initial_theta2
+
+        move_to_angles(change_theta_1,change_theta_2)
+
+        initial_theta1 = change_theta_1
+        initial_theta2 = change_theta_2
+
 
 
 
@@ -356,8 +333,8 @@ def main():
     motor1.reset()
     motor2.reset()
 
-    #x, y = forward_kinematics(motor1.position, motor2.position)
-    #print("The end effector is at position ( " + str(round(x,1)) + ',' + str(round(y,1)) + ")", file=sys.stderr)
+    x, y = forward_kinematics(motor1.position, motor2.position)
+    print("The end effector is at position ( " + str(round(x,1)) + ',' + str(round(y,1)) + ")", file=sys.stderr)
 
     '''move_to_angles(theta1, theta2)
     x, y = forward_kinematics(motor1.position, motor2.position)
@@ -371,25 +348,26 @@ def main():
     #move_to_position_newton(18, -15.7)
     #move_to_position_newton(8, 18)
     #measure_midpoint()
-    x, y = forward_kinematics(motor1.position, motor2.position)
-    print("The end effector is at position ( " + str(round(x,1)) + ',' + str(round(y,1)) + ")", file=sys.stderr)
-    point1 = (18, -15.7)  # Starting point
-    point2 = (3.6, 17.8)  # Ending point
+    #x, y = forward_kinematics(motor1.position, motor2.position)
+    #print("The end effector is at position ( " + str(round(x,1)) + ',' + str(round(y,1)) + ")", file=sys.stderr)
+    point1 = (15, -10)  # Starting point
+    point2 = (15, 15) # Ending point
     num_steps = 10  # Number of steps to divide the line
 
-    draw_straight_line(point1, point2, num_steps)
+    #draw_straight_line(point1, point2, num_steps)
 
     x, y = forward_kinematics(motor1.position, motor2.position)
     print("The end effector is at position ( " + str(round(x,1)) + ',' + str(round(y,1)) + ")", file=sys.stderr)
 
     # Initialize tracker, server, and UVS
-    #tracker = Tracker('g', 'r')
-    #server = Server('192.168.0.2', 9999)
-    #uvs = UVS(tracker, server)
+    tracker = Tracker('b', 'r')
+    server = Server('169.254.138.119', 9999)
+    client = Client('169.254.138.119', 9999)
+    uvs = UVS(tracker, server, client)
 
     # Run UVS
-    #print("Running UVS")
-    #uvs.run()
+    print("Running UVS")
+    uvs.run()
 
 if __name__ == "__main__":
     main()

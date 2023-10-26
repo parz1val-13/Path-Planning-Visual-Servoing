@@ -41,7 +41,7 @@ class Tracker:
     def TrackerThread(self, pointColor, goalColor):
         print("Tracker Started")
         # Get the camera
-        vc = cv2.VideoCapture(0)
+        vc = cv2.VideoCapture(1)
         if vc.isOpened(): # try to get the first frame
             rval, frame = vc.read()
         else:
